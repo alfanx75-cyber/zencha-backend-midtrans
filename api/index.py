@@ -1,21 +1,30 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 import requests
-from flask_cors import CORS
+import os
 
 app = Flask(__name__)
-CORS(app) # Mengizinkan web Lovable mengakses API ini
+
+# Fungsi penjinak Satpam CORS
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 MIDTRANS_SERVER_KEY = os.environ.get('MIDTRANS_SERVER_KEY')
 
-@app.route('/api/get-token', methods=['POST'])
+@app.route('/api/get-token', methods=['POST', 'OPTIONS'])
 def get_snap_token():
+    # Tangani sapaan awal dari browser (Preflight)
+    if request.method == 'OPTIONS':
+        return make_response(jsonify({}), 200)
+
     try:
         data = request.json
-        # 1. Siapkan data pesanan dari web Lovable
         order_id = data.get('order_id')
         gross_amount = data.get('total_harga')
         
-        # 2. Susun format permintaan untuk Midtrans Snap
         payload = {
             "transaction_details": {
                 "order_id": order_id,
@@ -26,7 +35,6 @@ def get_snap_token():
             }
         }
         
-        # 3. Minta token QRIS/E-Money ke Midtrans
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json"
@@ -44,16 +52,3 @@ def get_snap_token():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# Endpoint ini untuk mendengarkan jika pelanggan sudah sukses bayar
-@app.route('/api/webhook', methods=['POST'])
-def midtrans_webhook():
-    notif = request.json
-    transaction_status = notif.get('transaction_status')
-    order_id = notif.get('order_id')
-    
-    if transaction_status in ['settlement', 'capture']:
-        # DI SINI NANTI KITA TAMBAHKAN KODE UNTUK UPDATE FIREBASE JADI "LUNAS"
-        print(f"Pesanan {order_id} LUNAS!")
-        
-    return jsonify({"status": "ok"}), 200
